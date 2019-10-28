@@ -1,16 +1,10 @@
 {
-  "name": "mqqt.reader",
+  "name": "Smappee.API",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No tests yet...\""
   },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "mqtt": "^2.18.8",
-    "pg": "^7.4.3",
-    "request": "^2.88.0"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }
