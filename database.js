@@ -7,12 +7,12 @@ const getDevicesByDeviceType = async(deviceTypeId) => {
     //  const client = pool.connect();
       var results = [];
       try {
-      const { rows } = await pool.query('SELECT * FROM device WHERE deviceTypeId = $1 ORDER BY device_id ASC',[deviceTypeId]);
-      // Stream results back one row at a time
-      console.log(JSON.stringify(rows));
-      return rows;
+        const { rows } = await pool.query('SELECT * FROM device WHERE deviceTypeId = $1 ORDER BY device_id ASC',[deviceTypeId]);
+        // Stream results back one row at a time
+        console.log(JSON.stringify(rows));
+        return rows;
       }catch(err){
-          console.log('Database ' + err)
+          console.error('Database ' + err)
       }
   
       // After all data is returned, close connection and return results
@@ -38,7 +38,7 @@ const getDevicesInfoByDeviceType = async(deviceTypeId) => {
         console.log(JSON.stringify(rows));
         return rows;
       }catch(err){
-          console.log('Database ' + err)
+          console.error('Database ' + err)
       }
   
       return results;
@@ -52,7 +52,7 @@ const getDevice = async(deviceId) => {
         console.log(JSON.stringify(rows[0]));
         return rows[0];
       }catch(err){
-          console.log('Database ' + err)
+          console.error('Database ' + err)
       }
       return null;
   }
@@ -64,28 +64,28 @@ const getDeviceByIdentifier = async(identifier) => {
       console.log(JSON.stringify(rows[0]));
       return rows[0];
     }catch(err){
-        console.log('Database ' + err)
+        console.error('Database ' + err)
     }
     return null;
 }
 
 const getEnergy = async(deviceId) => {
     try {
-    const { rows } = await pool.query('SELECT * FROM energy where device_id = $1 ORDER BY time DESC LIMIT 1', [deviceId]);
-    console.log(JSON.stringify(rows));
-    return rows;
-}catch(err){
-    console.log('Database ' + err)
-}
+        const { rows } = await pool.query('SELECT * FROM energy where device_id = $1 ORDER BY time DESC LIMIT 1', [deviceId]);
+        console.log(JSON.stringify(rows));
+        return rows;
+    }catch(err){
+        console.error('Database ' + err)
+    }
     return [];
 }
 
-const insertSmappeeEnergy = (total, yesterday,today, device_id, time) => {
+const insertSmappeeEnergy = (total, yesterday,today, power, device_id, time) => {
     console.log("inserting....");
     pool.query('INSERT INTO energy (time, device_id, total, yesterday,today, power,factor, voltage, current) values ($1, $2, $3, $4,$5,$6,$7,$8,$9) ON CONFLICT (time,device_id) DO UPDATE SET total = EXCLUDED.total, yesterday = EXCLUDED.yesterday, today = EXCLUDED.today',
-      [time, device_id, total, yesterday,today, 0,0, 0, 0],(err,res)=> {
+      [time, device_id, total, yesterday,today, power,0, 0, 0],(err,res)=> {
       if(err){
-          console.log('Database ' + err) 
+          console.error('Database ' + err) 
       }
   });
   console.log("insertSmappeeEnergy done");
@@ -96,7 +96,7 @@ const insertEnergy = (energy, device, time) => {
       pool.query('INSERT INTO energy (time, device_id, total, yesterday,today, power,factor, voltage, current) values($1, $2, $3, $4,$5,$6,$7,$8,$9)',
         [time, device.device_id, energy.Total, energy.Yesterday,energy.Today, energy.Power,energy.Factor, energy.Voltage, energy.Current],(err,res)=> {
         if(err){
-            console.log('Database ' + err) 
+            console.error('Database ' + err) 
         }
     });
 }
@@ -111,14 +111,14 @@ const upsertTimer = ( device, number, timer) => {
                 pool.query('UPDATE timer SET (arm = $1, "time" = $2, "window" = 3$, days = 4$ , "repeat" = 5$, "output" = 6$, action = 7$) WHERE device_id = $8 and number = $9',
                 [ timer.arm,timer.Time, timer.window, timer.days, timer.repeat, timer.output, timer.action, device.device_id, number],(err,res)=> {
                  if(err){
-                    console.log('Database ' + err) 
+                    console.error('Database ' + err) 
                   }
                 });
             }else{
                 pool.query('INSERT INTO timer (device_id, numbered, arm, "time", "window", days, "repeat", "output", action) values($1, $2, $3, $4,$5,$6,$7,$8,$9)',
                 [ device.device_id, number, timer.arm,timer.time, timer.window, timer.days, timer.repeat, timer.output, timer.action],(err,res)=> {
                  if(err){
-                    console.log('Database ' + err) 
+                    console.error('Database ' + err) 
                   }
                 });
             }

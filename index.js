@@ -1,14 +1,14 @@
 var database = require('./database.js');
 const request = require('request');
 
-function addEnergy(energy,deviceIdentifier, currentValue,yesterdayValue,totalValue){
+function addEnergy(energy,deviceIdentifier, currentValue,yesterdayValue,totalValue,power){
 	console.log("currentValue:"+currentValue);
 	console.log("yesterdayValue:"+yesterdayValue);
 	console.log("totalValue:"+totalValue);
 	
   var date = new Date(energy.timestamp);
 	date.setHours(date.getHours() + 2);
-	database.insertSmappeeEnergy(totalValue, yesterdayValue, currentValue, deviceIdentifier ,date);
+	database.insertSmappeeEnergy(totalValue, yesterdayValue, currentValue, power, deviceIdentifier, date);
 }
 
 
@@ -67,7 +67,8 @@ function getDataReading(deviceId, locationIdentifier, fromTime,toTime, total,yes
 				lastdate = data.timestamp;
 				currentValue = (parseFloat(parseFloat(currentValue) + parseFloat(data.consumption/1000)).toFixed(4));
 				totalValue = (parseFloat(parseFloat(totalValue) + parseFloat(data.consumption/1000)).toFixed(4));
-				addEnergy(data, deviceId, currentValue,yesterdayValue,totalValue);		
+				let power =  (parseFloat(parseFloat(data.consumption) * (5/60)).toFixed(4));
+				addEnergy(data, deviceId, currentValue,yesterdayValue,totalValue, power);		
 		  }
 		  console.log("and we out...");
 		}else{
