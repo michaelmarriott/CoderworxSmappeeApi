@@ -1,76 +1,123 @@
 var database = require('./database.js');
 const request = require('request');
+var AUTH_TOKEN  = 'Bearer cba02ce7-bdd7-3e16-a38d-986c9a74f675';
+var API_URL = 'https://app1pub.smappee.net/dev/v2/';
 
-function addEnergy(energy,deviceIdentifier, currentValue,yesterdayValue,totalValue,power){
-	console.log("currentValue:"+currentValue);
-	console.log("yesterdayValue:"+yesterdayValue);
-	console.log("totalValue:"+totalValue);
-	
-  var date = new Date(energy.timestamp);
-	date.setHours(date.getHours() + 2);
-	database.insertSmappeeEnergy(totalValue, yesterdayValue, currentValue, power, deviceIdentifier, date);
+async function addEnergy(datetime,deviceIdentifier, currentValue,yesterdayValue,totalValue,power,hourlyfactor){
+	await database.insertSmappeeEnergy(totalValue, yesterdayValue, currentValue, power, deviceIdentifier, datetime, 2,hourlyfactor);
 }
 
+// 5 minute values	10 days -1
+// Hourly values	90 days -2
+// Day values	365 days -3
+// Monthly values	5 years -4
 
 function getData(device){
 	var lastDateTime = device.energy_time;
-        var lastDateTimeUTC = 1549663200000;
+	
 	if (lastDateTime != null){
-		lastDateTime.setHours(lastDateTime.getHours()-2);
-		lastDateTime.setMinutes(lastDateTime.getMinutes()+5);
-		lastDateTimeUTC = lastDateTime.getTime();		
+		var getCurrentDateTimeUTC = new Date().getTime();
+		var measureDayCurrentDateTime = new Date();
+		var measureHourlyCurrentDateTime = new Date();
+		measureHourlyCurrentDateTime.setHours(0);
+		measureDayCurrentDateTime.setDate(measureDayCurrentDateTime.getDate()-88);
+		measureHourlyCurrentDateTime.setDate(measureHourlyCurrentDateTime.getDate()-10);
+		console.log('getDataReading ' + device)	
+		console.log('lastDateTime ' + lastDateTime.getTime())	
+		if(futureDateTime(lastDateTime,1,0,0) < measureDayCurrentDateTime.getTime()){
+			getDataReading(3,device.device_id, device.location_identifier,  lastDateTime.getTime(), measureDayCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today,true);
+		}else if(futureDateTime(lastDateTime,0,1,0)  < measureHourlyCurrentDateTime.getTime()){
+			getDataReading(2,device.device_id, device.location_identifier,  lastDateTime.getTime(), measureHourlyCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today,true);
+		}else{
+			getDataReading(1,device.device_id, device.location_identifier,  lastDateTime.getTime(), getCurrentDateTimeUTC, device.energy_total, device.energy_yesterday, device.energy_today,false);
+		}
+	}else{
+		var lastDateTime	= new Date();
+		lastDateTime.setDate(lastDateTime.getDate()-(365*5));
+		var measureMonthCurrentDateTime = new Date();
+		measureMonthCurrentDateTime.setDate(measureMonthCurrentDateTime.getDate()-365)
+		getDataReading(4,device.device_id, device.location_identifier,  lastDateTime.getTime(), 
+		measureMonthCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today,true);
 	}
-	var getCurrentDateTimeUTC = new Date().getTime();
-	console.log('getDataReading ' + device)
-	getDataReading(device.device_id, device.location_identifier,  lastDateTimeUTC, getCurrentDateTimeUTC, device.energy_total, device.energy_yesterday, device.energy_today);
 }
 
-//https://app1pub.smappee.net/dev/v2/servicelocation/35205/consumption?aggregation=3&from=1546624646088&to=1548624766770
+//https://app1pub.smappee.net/dev/v2/servicelocation/39918/consumption?aggregation=3&from=1514768400000&to=1548624766770
 
-function getDataReading(deviceId, locationIdentifier, fromTime,toTime, total,yesterday,today){
+function getDataReading(aggregation, deviceId, locationIdentifier, fromTime,toTime, total,yesterday,today,forceSave){
 
 	if(locationIdentifier == null){
 		return;
 	}
 
-	var url = "https://app1pub.smappee.net/dev/v2/servicelocation/"+locationIdentifier+"/consumption?aggregation=1&from="+fromTime+"&to="+toTime+"";
+	var url = API_URL+ "servicelocation/"+locationIdentifier+"/consumption?aggregation="+aggregation+"&from="+fromTime+"&to="+toTime+"";
 	var currentValue = today;
 	var yesterdayValue = yesterday;
-	var totalValue=total;
+	var totalValue = total;
 	var lastdate = fromTime;
+	var aggregation_closure = aggregation;
+
 	
-	console.log('url ' + url)
+	console.log(deviceId +': url ' + url)
 	const options = {
 		url: url,
 		headers: {
-			'Authorization': 'Bearer 424883e3-a785-31a9-bfe6-3c020057f872'
+			'Authorization': AUTH_TOKEN
 		}
-	  };
+	};
 
-	  function callback(error, response, body) {
+	async function callback(error, response, body) {
+		console.log(deviceId +": callback");
+		var hourlyfactor = 1;
+		if(aggregation_closure == 1){
+			hourlyfactor = 0.16666667;
+		}else if(aggregation_closure == 3){
+			hourlyfactor = 24;
+		}else if(aggregation_closure == 4){
+			hourlyfactor = 24 * 30;
+		}
+
 		if (!error && response.statusCode == 200) {
 			const info = JSON.parse(body);
-			console.log(info);
 			var len = info.consumptions.length;
 			var i=0;
+			if(len == 0){
+				await addEnergy(new Date(lastdate), deviceId, 0,0,0, 0);		
+			}
+			var previousDatetimeStamp = lastdate;
 		  for(var data of info.consumptions) {
 				i++;
-				if(i == len){
-					console.log("dont add the last one...");
+				if(i == len && !forceSave){
+					console.log(deviceId +": dont add the last one...");
 					break;
+				}else{
+					console.log(deviceId +": "+ i +"-"+ len);
 				}
 
-			  if(nextday(lastdate,data.timestamp)){
+				currentDateTime = new Date(data.timestamp);
+				if(currentDateTime <= new Date(lastdate)){
+					console.log(deviceId +":currentDateTime"+currentDateTime+ "lastdate"+new Date(lastdate));
+					console.log(deviceId +":already added.....................................");
+					continue;
+				}
+
+			  if(nextday(previousDatetimeStamp,data.timestamp)){
+					console.log(deviceId +":new day"+previousDatetimeStamp +"-"+data.timestamp );
 					yesterdayValue = currentValue;
 					currentValue = 0;
-			  }
-				lastdate = data.timestamp;
+				}
+				
 				currentValue = (parseFloat(parseFloat(currentValue) + parseFloat(data.consumption/1000)).toFixed(4));
 				totalValue = (parseFloat(parseFloat(totalValue) + parseFloat(data.consumption/1000)).toFixed(4));
 				let power =  (parseFloat(parseFloat(data.consumption) * (5/60)).toFixed(4));
-				addEnergy(data, deviceId, currentValue,yesterdayValue,totalValue, power);		
+				if(aggregation_closure == 4){
+					hourlyfactor = 24 * daysInMonth(currentDateTime.getFullYear(),currentDateTime.getMonth());
+				}
+				console.log(deviceId +":hourlyfactor: "+hourlyfactor);
+				await addEnergy(currentDateTime, deviceId, currentValue,yesterdayValue,totalValue, power, hourlyfactor);		
+				previousDatetimeStamp = data.timestamp;
 		  }
-		  console.log("and we out...");
+			console.log(deviceId +" and we out...");
+		
 		}else{
 			console.log('Error'+error + response.statusCode);
 		}
@@ -96,13 +143,81 @@ function nextday(dateFrom,dateTo){
    }
 }
 
+
+function daysInMonth (year,month) {
+
+	
+	var x = new Date(year, month+1, 0).getDate();
+	console.log("daysInMonth"+x);
+	return x;
+}
+
+function addNewServiceLocation(){
+	var url = API_URL + "servicelocation/";
+
+	const options = {
+		url: url,
+		headers: {
+			'Authorization': AUTH_TOKEN
+		}
+	};
+
+
+	async function callbackInsertSmappeeLocationAndDevice(error, response, body) {
+		if (!error && response.statusCode == 200) {
+			const info = JSON.parse(body);
+			console.log('----------',info);
+		   for(var data of info.serviceLocations) {
+			 	var location = await database.getLocationByIdentifier(data.serviceLocationId);	
+			 	if(location == null){
+					console.log("insertSmappeeLocationAndDevice");
+			 		await database.insertSmappeeLocationAndDevice(data.serviceLocationId,data.name,null,null);
+			 	}	
+		   }
+		  console.log("and we out...");
+		}else{
+			console.error('Error'+error + response);
+		}
+		console.log("insertSmappeeLocationAndDevice callback done");
+		return;
+	}
+		
+	request(options, callbackInsertSmappeeLocationAndDevice);
+}
+
+function futureDateTime(inputTime, day, hour, minute){	
+	var returnDate = new Date(inputTime.getTime());
+	returnDate.setDate(returnDate.getDate()+ day);
+	returnDate.setHours(returnDate.getHours()+hour);
+	returnDate.setMinutes(returnDate.getMinutes()+minute);
+	return returnDate;
+}
+
+
+function sleep(milliseconds) {
+  const date = Date.now();
+  let currentDate = null;
+  do {
+    currentDate = Date.now();
+  } while (currentDate - date < milliseconds);
+}
+
+//addNewServiceLocation();
+console.log('Running at  ' + new Date());
 database.getDevicesInfoByDeviceType(2).then(devices => {
+	console.log('devices ' + devices)
 	for(var device of devices) {
 		console.log('device ' + device)
 			getData(device);
 	}
+	console.log("end of sleep");
 });
 
 
+setTimeout(() => {  console.log("end of sleep!"); }, 30000);
+
 console.log("end of script");
+
+console.log("end of seep");
+
 

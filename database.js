@@ -18,9 +18,9 @@ const getDevicesByDeviceType = async(deviceTypeId) => {
       // After all data is returned, close connection and return results
     //  await pool.release();
       return results;
-  }
-
-  
+}
+exports.getDevicesByDeviceType = getDevicesByDeviceType;
+ 
 const getDevicesInfoByDeviceType = async(deviceTypeId) => {
     //  const client = pool.connect();
       var results = [];
@@ -30,22 +30,19 @@ const getDevicesInfoByDeviceType = async(deviceTypeId) => {
       'inner join public.location l on l.location_id = d.location_id '+
       'left join (  select e1.device_id,e1.time,e1.total,e1.yesterday,e1.today from energy e1 inner join  '+
         ' (select max(time) as time ,ei.device_id from energy ei group by ei.device_id) e on e.time = e1.time and e.device_id = e1.device_id)  e2 on e2.device_id = d.device_id '+
-      'WHERE d.devicetype_id = $1 '+
+      'WHERE d.devicetype_id = $1 and l.is_active = true  '+
       'ORDER BY d.device_id ASC';
-
       try {
         const { rows } = await pool.query(sql,[deviceTypeId]);
-        console.log(JSON.stringify(rows));
         return rows;
       }catch(err){
           console.error('Database ' + err)
       }
   
-      return results;
-  }
+  return results;
+}
+exports.getDevicesInfoByDeviceType = getDevicesInfoByDeviceType; 
 
-
-  
 const getDevice = async(deviceId) => {
       try {
         const { rows } = await pool.query('SELECT * FROM device WHERE device_id =$1 ORDER BY device_id ASC',[deviceId]);
@@ -55,8 +52,8 @@ const getDevice = async(deviceId) => {
           console.error('Database ' + err)
       }
       return null;
-  }
-
+}
+exports.getDevice = getDevice;
   
 const getDeviceByIdentifier = async(identifier) => {
     try {
@@ -68,7 +65,7 @@ const getDeviceByIdentifier = async(identifier) => {
     }
     return null;
 }
-
+exports.getDeviceByIdentifier = getDeviceByIdentifier;
 const getEnergy = async(deviceId) => {
     try {
         const { rows } = await pool.query('SELECT * FROM energy where device_id = $1 ORDER BY time DESC LIMIT 1', [deviceId]);
@@ -79,18 +76,18 @@ const getEnergy = async(deviceId) => {
     }
     return [];
 }
-
-const insertSmappeeEnergy = (total, yesterday,today, power, device_id, time) => {
-    console.log("inserting....");
-    pool.query('INSERT INTO energy (time, device_id, total, yesterday,today, power,factor, voltage, current) values ($1, $2, $3, $4,$5,$6,$7,$8,$9) ON CONFLICT (time,device_id) DO UPDATE SET total = EXCLUDED.total, yesterday = EXCLUDED.yesterday, today = EXCLUDED.today',
-      [time, device_id, total, yesterday,today, power,0, 0, 0],(err,res)=> {
+exports.getEnergy = getEnergy;
+  const insertSmappeeEnergy = async (total, yesterday,today, power, device_id, time,utcdate,hourlyfactor) => {
+    //ON CONFLICT (time,device_id,utcdate) DO UPDATE SET total = EXCLUDED.total, yesterday = EXCLUDED.yesterday, today = EXCLUDED.today
+    await pool.query('INSERT INTO energy (time, device_id, total, yesterday,today, power,factor, voltage, current,utcdate,hourlyfactor) values ($1, $2, $3, $4,$5,$6,$7,$8,$9,$10,$11)  ',
+      [time, device_id, total, yesterday,today, power,0, 0, 0,utcdate,hourlyfactor],(err,res)=> {
       if(err){
-          console.error('Database ' + err) 
+          console.error(device_id+ ": Database " + err + " "+  time) 
       }
   });
   console.log("insertSmappeeEnergy done");
 }
-
+exports.insertSmappeeEnergy = insertSmappeeEnergy;
 
 const insertEnergy = (energy, device, time) => {
       pool.query('INSERT INTO energy (time, device_id, total, yesterday,today, power,factor, voltage, current) values($1, $2, $3, $4,$5,$6,$7,$8,$9)',
@@ -100,6 +97,7 @@ const insertEnergy = (energy, device, time) => {
         }
     });
 }
+exports.insertEnergy = insertEnergy;
 
 const upsertTimer = ( device, number, timer) => {
     pool.query("SELECT count(*) FROM timer WHERE device_id = $1 and number = $2", [device.device_id, number],(err,res)=> {
@@ -127,19 +125,59 @@ const upsertTimer = ( device, number, timer) => {
 
    
 }
-
-exports.getDevicesInfoByDeviceType = getDevicesInfoByDeviceType;
-
-exports.getDevicesByDeviceType = getDevicesByDeviceType;
-
-exports.getDevice = getDevice;
-
-exports.insertSmappeeEnergy = insertSmappeeEnergy;
-
-exports.getEnergy = getEnergy;
-
-exports.getDeviceByIdentifier = getDeviceByIdentifier;
-
-exports.insertEnergy = insertEnergy;
-
 exports.upsertTimer = upsertTimer;
+
+const getLocationByIdentifier = async(identifier) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM location WHERE identifier = $1',[identifier]);
+    console.log(identifier,rows);
+    if(rows.length > 0){
+      console.log("found");
+      return rows[0];
+    }
+  }catch(err){
+      console.error('Database ' + err)
+  }
+  return null;
+}
+exports.getLocationByIdentifier = getLocationByIdentifier;
+
+const insertSmappeeLocationAndDevice = async (identifier, name,username,password)=>{
+  var timezone_id = 1;
+  var customer_id = 2;
+  var devicetype_id = 2;
+  var tele_period =  600;
+  var location_id = await insertLocation({"Name":name,"TimezoneId":timezone_id,"CustomerId":customer_id,"Identifier":identifier});
+  var device = { 
+    "Identifier": "Default", "Name": name, "Description": "Entire Store", "CustomerId":customer_id,"DeviceTypeId": devicetype_id, 
+  "LocationId":location_id, "TelePeriod": tele_period,"Username":username,"Password":password}
+  await insertDevice(device);
+  return location_id;
+};
+exports.insertSmappeeLocationAndDevice = insertSmappeeLocationAndDevice;
+
+const insertLocation = async(data)=>{
+  console.log('insertLocaton '); 
+  let result = await pool.query(`INSERT INTO location (name, timezone_id, customer_id,identifier,is_active) 
+  values ($1,$2,$3,$4,$5) RETURNING location_id`,
+  [ data.Name, data.TimezoneId,data.CustomerId,data.Identifier, false]);
+  var location_id =  result.rows[0].location_id;
+  console.log('result ' + location_id);
+  return location_id;
+}
+exports.insertLocation = insertLocation;
+
+const insertDevice = async(device)=>{
+  console.error(JSON.stringify(device)); 
+  await pool.query(`INSERT INTO device 
+    (identifier, name, description, customer_id, devicetype_id, location_id,tele_period, username, password, parent_device_id )
+    values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) `,
+    [ device.Identifier, device.Name, device.Description, device.CustomerId, device.DeviceTypeId, 
+      device.LocationId, device.TelePeriod, device.Username,device.Password, null],(err,res)=> {
+    if(err){
+        console.error('Database insertDevice: ' + err) 
+    }
+  });
+}
+exports.insertDevice = insertDevice;
+
