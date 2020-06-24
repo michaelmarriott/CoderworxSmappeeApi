@@ -1,7 +1,7 @@
 var {Pool} = require('pg');
-var {config} = require('./database_config.js');
+var {database_config} = require('./config.js');
 
-const pool = new Pool(config)
+const pool = new Pool(database_config)
 
 const getDevicesByDeviceType = async(deviceTypeId) => {
     //  const client = pool.connect();
@@ -9,7 +9,7 @@ const getDevicesByDeviceType = async(deviceTypeId) => {
       try {
         const { rows } = await pool.query('SELECT * FROM device WHERE deviceTypeId = $1 ORDER BY device_id ASC',[deviceTypeId]);
         // Stream results back one row at a time
-        console.log(JSON.stringify(rows));
+        //console.log(JSON.stringify(rows));
         return rows;
       }catch(err){
           console.error('Database ' + err)
@@ -46,7 +46,7 @@ exports.getDevicesInfoByDeviceType = getDevicesInfoByDeviceType;
 const getDevice = async(deviceId) => {
       try {
         const { rows } = await pool.query('SELECT * FROM device WHERE device_id =$1 ORDER BY device_id ASC',[deviceId]);
-        console.log(JSON.stringify(rows[0]));
+        //console.log(JSON.stringify(rows[0]));
         return rows[0];
       }catch(err){
           console.error('Database ' + err)
@@ -58,7 +58,7 @@ exports.getDevice = getDevice;
 const getDeviceByIdentifier = async(identifier) => {
     try {
       const { rows } = await pool.query('SELECT * FROM device WHERE identifier =$1 ORDER BY device_id ASC',[identifier]);
-      console.log(JSON.stringify(rows[0]));
+      //console.log(JSON.stringify(rows[0]));
       return rows[0];
     }catch(err){
         console.error('Database ' + err)
@@ -69,7 +69,7 @@ exports.getDeviceByIdentifier = getDeviceByIdentifier;
 const getEnergy = async(deviceId) => {
     try {
         const { rows } = await pool.query('SELECT * FROM energy where device_id = $1 ORDER BY time DESC LIMIT 1', [deviceId]);
-        console.log(JSON.stringify(rows));
+        //console.log(JSON.stringify(rows));
         return rows;
     }catch(err){
         console.error('Database ' + err)
@@ -85,7 +85,6 @@ exports.getEnergy = getEnergy;
           console.error(device_id+ ": Database " + err + " "+  time) 
       }
   });
-  console.log("insertSmappeeEnergy done");
 }
 exports.insertSmappeeEnergy = insertSmappeeEnergy;
 
@@ -102,9 +101,9 @@ exports.insertEnergy = insertEnergy;
 const upsertTimer = ( device, number, timer) => {
     pool.query("SELECT count(*) FROM timer WHERE device_id = $1 and number = $2", [device.device_id, number],(err,res)=> {
         if(err){
-            console.log('Database ' + err) 
+            console.error('Database ' + err) 
         }else{
-            console.log(res);
+            //console.log(res);
             if(res > 0){
                 pool.query('UPDATE timer SET (arm = $1, "time" = $2, "window" = 3$, days = 4$ , "repeat" = 5$, "output" = 6$, action = 7$) WHERE device_id = $8 and number = $9',
                 [ timer.arm,timer.Time, timer.window, timer.days, timer.repeat, timer.output, timer.action, device.device_id, number],(err,res)=> {
@@ -130,9 +129,9 @@ exports.upsertTimer = upsertTimer;
 const getLocationByIdentifier = async(identifier) => {
   try {
     const { rows } = await pool.query('SELECT * FROM location WHERE identifier = $1',[identifier]);
-    console.log(identifier,rows);
+    //console.log(identifier,rows);
     if(rows.length > 0){
-      console.log("found");
+      //console.log("found");
       return rows[0];
     }
   }catch(err){
