@@ -2,6 +2,7 @@ var {Pool} = require('pg');
 var {database_config} = require('./config.js');
 
 const pool = new Pool(database_config)
+let DefaultParentLocationId = 574
 
 const getDevicesByDeviceType = async(deviceTypeId) => {
     //  const client = pool.connect();
@@ -30,7 +31,7 @@ const getDevicesInfoByDeviceType = async(deviceTypeId) => {
       'inner join public.location l on l.location_id = d.location_id '+
       'left join (  select e1.device_id,e1.time,e1.total,e1.yesterday,e1.today from energy e1 inner join  '+
         ' (select max(time) as time ,ei.device_id from energy ei group by ei.device_id) e on e.time = e1.time and e.device_id = e1.device_id)  e2 on e2.device_id = d.device_id '+
-      'WHERE d.devicetype_id = $1 and l.is_active = true  '+
+      'WHERE d.devicetype_id = $1 and d.device_id = 720 '+
       'ORDER BY d.device_id ASC';
       try {
         const { rows } = await pool.query(sql,[deviceTypeId]);
@@ -146,7 +147,8 @@ const insertSmappeeLocationAndDevice = async (identifier, name,username,password
   var customer_id = 2;
   var devicetype_id = 2;
   var tele_period =  600;
-  var location_id = await insertLocation({"Name":name,"TimezoneId":timezone_id,"CustomerId":customer_id,"Identifier":identifier});
+  
+  var location_id = await insertLocation({"Name":name,"TimezoneId":timezone_id,"CustomerId":customer_id,"Identifier":identifier, "ParentLocationId":DefaultParentLocationId,"IsActive": false});
   var device = { 
     "Identifier": "Default", "Name": name, "Description": "Entire Store", "CustomerId":customer_id,"DeviceTypeId": devicetype_id, 
   "LocationId":location_id, "TelePeriod": tele_period,"Username":username,"Password":password}
@@ -157,9 +159,9 @@ exports.insertSmappeeLocationAndDevice = insertSmappeeLocationAndDevice;
 
 const insertLocation = async(data)=>{
   console.log('insertLocaton '); 
-  let result = await pool.query(`INSERT INTO location (name, timezone_id, customer_id,identifier,is_active) 
-  values ($1,$2,$3,$4,$5) RETURNING location_id`,
-  [ data.Name, data.TimezoneId,data.CustomerId,data.Identifier, false]);
+  let result = await pool.query(`INSERT INTO location (name, timezone_id, customer_id,identifier,parent_location_id,is_active) 
+  values ($1,$2,$3,$4,$5,$6) RETURNING location_id`,
+  [ data.Name, data.TimezoneId,data.CustomerId,data.Identifier,data.ParentLocationId, data.IsActive]);
   var location_id =  result.rows[0].location_id;
   console.log('result ' + location_id);
   return location_id;

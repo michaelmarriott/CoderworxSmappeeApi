@@ -14,7 +14,7 @@ async function addEnergy(datetime, deviceIdentifier, currentValue, yesterdayValu
 // Day values	365 days -3
 // Monthly values	5 years -4
 
-function getData(device) {
+async function getData(device) {
 	var lastDateTime = device.energy_time;
 
 	if (lastDateTime != null) {
@@ -24,8 +24,8 @@ function getData(device) {
 		measureHourlyCurrentDateTime.setHours(0);
 		measureDayCurrentDateTime.setDate(measureDayCurrentDateTime.getDate() - 88);
 		measureHourlyCurrentDateTime.setDate(measureHourlyCurrentDateTime.getDate() - 10);
-		//console.log('getDataReading ' + device)	
-		//console.log('lastDateTime ' + lastDateTime.getTime())	
+		console.log('getDataReading ' + device)	
+		console.log('lastDateTime ' + lastDateTime.getTime())	
 		if (futureDateTime(lastDateTime, 1, 0, 0) < measureDayCurrentDateTime.getTime()) {
 			getDataReading(3, device.device_id, device.location_identifier, lastDateTime.getTime(), measureDayCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today, true);
 		} else if (futureDateTime(lastDateTime, 0, 1, 0) < measureHourlyCurrentDateTime.getTime()) {
@@ -59,7 +59,7 @@ function getDataReading(aggregation, deviceId, locationIdentifier, fromTime, toT
 	var aggregation_closure = aggregation;
 
 
-	//	console.log(deviceId + ': url ' + url)
+		console.log(deviceId + ': url ' + url)
 	const options = {
 		url: url,
 		headers: {
@@ -89,21 +89,21 @@ function getDataReading(aggregation, deviceId, locationIdentifier, fromTime, toT
 			for (var data of info.consumptions) {
 				i++;
 				if (i == len && !forceSave) {
-					//	console.log(deviceId + ": dont add the last one...");
+						console.log(deviceId + ": dont add the last one...");
 					break;
 				} else {
-					//	console.log(deviceId + ": " + i + "-" + len);
+						console.log(deviceId + ": " + i + "-" + len);
 				}
 
 				currentDateTime = new Date(data.timestamp);
 				if (currentDateTime <= new Date(lastdate)) {
-					//		console.log(deviceId + ":currentDateTime" + currentDateTime + "lastdate" + new Date(lastdate));
-					//		console.log(deviceId + ":already added.....................................");
+							console.log(deviceId + ":currentDateTime" + currentDateTime + "lastdate" + new Date(lastdate));
+							console.log(deviceId + ":already added.....................................");
 					continue;
 				}
 
 				if (nextday(previousDatetimeStamp, data.timestamp)) {
-					//		console.log(deviceId + ":new day" + previousDatetimeStamp + "-" + data.timestamp);
+							console.log(deviceId + ":new day" + previousDatetimeStamp + "-" + data.timestamp);
 					yesterdayValue = currentValue;
 					currentValue = 0;
 				}
@@ -114,16 +114,16 @@ function getDataReading(aggregation, deviceId, locationIdentifier, fromTime, toT
 				if (aggregation_closure == 4) {
 					hourlyfactor = 24 * daysInMonth(currentDateTime.getFullYear(), currentDateTime.getMonth());
 				}
-				//	console.log(deviceId + ":hourlyfactor: " + hourlyfactor);
+					console.log(deviceId + ":hourlyfactor: " + hourlyfactor);
 				await addEnergy(currentDateTime, deviceId, currentValue, yesterdayValue, totalValue, power, hourlyfactor);
 				previousDatetimeStamp = data.timestamp;
 			}
-			//	console.log(deviceId + " and we out...");
+				console.log(deviceId + " and we out...");
 
 		} else {
 			console.error('Error: ' + error + JSON.stringify(response));
 		}
-		//console.log("getDataReading callback done");
+		console.log("getDataReading callback done");
 	}
 	request(options, callback);
 }
@@ -153,6 +153,7 @@ function daysInMonth(year, month) {
 }
 
 function addNewServiceLocation() {
+	console.log("addNewServiceLocation");
 	var url = API_URL + "servicelocation/";
 	const options = {
 		url: url,
@@ -226,10 +227,14 @@ function setAuthVariables(error, response, body){
 		console.log('----------', info);
 		AUTH_TOKEN = 'Bearer ' +info.access_token
 
-		//addNewServiceLocation();
-		
+		let x = (Math.random() * 10).toFixed(0)
+		if(x == 9){
+		//	addNewServiceLocation();
+		}
 		database.getDevicesInfoByDeviceType(2).then(devices => {
+			console.log('-----///???-');
 			for (var device of devices) {
+				console.log(device)
 				getData(device);
 			}
 		});
@@ -239,8 +244,9 @@ function setAuthVariables(error, response, body){
 }
 
 
-setAuth();
+//while (true){
+	setAuth();
+	//setTimeout(() => { console.log("end of sleep!"); }, 40000);
+//}
 
-
-setTimeout(() => { console.log("end of sleep!"); }, 40000);
 console.log('finished at  ' + new Date());
