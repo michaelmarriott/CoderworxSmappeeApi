@@ -207,8 +207,8 @@ function setAuth(){
 		headers: {},
 		form:{ 
 			'grant_type': 'password',
-			'client_id': 'EnergyRiteApi',
-			'client_secret': 'pVVcAK3hby',
+			'client_id': 'CodeworxAPI',
+			'client_secret': 'FUuQqn52Yi',
 			'username': 'Energyrite_API',
 			'password': 'smappee'
 		}
@@ -229,7 +229,7 @@ function setAuthVariables(error, response, body){
 
 		let x = (Math.random() * 10).toFixed(0)
 		if(x == 9){
-		//	addNewServiceLocation();
+			addNewServiceLocation();
 		}
 		database.getDevicesInfoByDeviceType(2).then(devices => {
 			console.log('-----///???-');
@@ -244,9 +244,9 @@ function setAuthVariables(error, response, body){
 }
 
 
-//while (true){
+while (true){
 	setAuth();
-	//setTimeout(() => { console.log("end of sleep!"); }, 40000);
-//}
+	setTimeout(() => { console.log("end of sleep!"); }, 40000);
+}
 
 console.log('finished at  ' + new Date());
