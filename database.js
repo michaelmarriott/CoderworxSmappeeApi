@@ -136,7 +136,7 @@ const insertSmappeeLocationAndDevice = async (identifier, name,username,password
   var devicetype_id = 2;
   var tele_period =  600;
   
-  var location_id = await insertLocation({"Name":name,"TimezoneId":timezone_id,"CustomerId":customer_id,"Identifier":identifier, "ParentLocationId":DefaultParentLocationId,"IsActive": false});
+  var location_id = await insertLocation({"Name":name,"TimezoneId":timezone_id,"CustomerId":customer_id,"Identifier":identifier, "ParentLocationId":DefaultParentLocationId,"IsActive": true});
   var device = { 
     "Identifier": identifier, "Name": name, "Description": "Entire Store", "CustomerId":customer_id,"DeviceTypeId": devicetype_id, 
   "LocationId":location_id, "TelePeriod": tele_period,"Username":username,"Password":password }
