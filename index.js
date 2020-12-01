@@ -30,15 +30,15 @@ async function getData(device) {
 		log.info('getDataReading ' + device)
 		log.info('lastDateTime ' + lastDateTime.getTime())
 		if (futureDateTime(lastDateTime, 1, 0, 0) < measureDayCurrentDateTime.getTime()) {
-			getDataReading(3, device.device_id, device.identifier, lastDateTime.getTime(), measureDayCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today, true);
+			getDataReading(3, device.device_id, device.identifier, futureDateTime(lastDateTime, 1, 0, 0).getTime(), measureDayCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today, true);
 		} else if (futureDateTime(lastDateTime, 0, 1, 0) < measureHourlyCurrentDateTime.getTime()) {
-			getDataReading(2, device.device_id, device.identifier, lastDateTime.getTime(), measureHourlyCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today, true);
+			getDataReading(2, device.device_id, device.identifier, futureDateTime(lastDateTime, 0, 1, 0).getTime(), measureHourlyCurrentDateTime.getTime(), device.energy_total, device.energy_yesterday, device.energy_today, true);
 		} else {
 			getDataReading(1, device.device_id, device.identifier, lastDateTime.getTime(), getCurrentDateTimeUTC, device.energy_total, device.energy_yesterday, device.energy_today, false);
 		}
 	} else {
 		var lastDateTime = new Date();
-		lastDateTime.setDate(lastDateTime.getDate() - (365 * 5));
+		lastDateTime.setDate(device.created);
 		var measureMonthCurrentDateTime = new Date();
 		measureMonthCurrentDateTime.setDate(measureMonthCurrentDateTime.getDate() - 365)
 		getDataReading(4, device.device_id, device.identifier, lastDateTime.getTime(),
@@ -59,6 +59,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 	var yesterdayValue = yesterday;
 	var totalValue = total;
 	var lastdate = fromTime;
+	var lastdateTo = toTime;
 	var aggregation_closure = aggregation;
 
 	log.info(deviceId + ': url ' + url)
@@ -86,7 +87,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 			var i = 0;
 			if (len == 0) {
 				if(aggregation_closure == 4){
-					lastdate = 	measureDayCurrentDateTime.setDate(measureDayCurrentDateTime.getDate() - dailyDays);
+					lastdate = 	lastdateTo.setDate(lastdateTo.getDate() - dailyDays);
 				}
 				await addEnergy(new Date(lastdate), deviceId, 0, 0, 0, 0);
 				return;
@@ -238,6 +239,7 @@ function setAuthVariables(error, response, body) {
 		if (x == 9) {
 			addNewServiceLocation();
 		}
+		log.info('getDevicesInfoByDeviceType');
 		database.getDevicesInfoByDeviceType(2).then(devices => {
 			for (var device of devices) {
 				log.info(device)
@@ -249,7 +251,9 @@ function setAuthVariables(error, response, body) {
 	}
 }
 
-setAuth();
-setTimeout(() => { log.info("end of sleep!"); }, 40000);
+	log.info('setAuth');
+	setAuth();
+	setTimeout(() => { log.info("end of sleep!"); }, 180000);
+
 
 log.info('finished at  ' + new Date());
