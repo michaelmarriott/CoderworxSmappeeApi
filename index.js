@@ -6,10 +6,14 @@ var { app_config } = require('./config.js');
 var AUTH_TOKEN = 'Bearer ';
 var API_URL = app_config.apiUrl;
 let dailyDays = 128;
-let hourlyDays = 10;
+let hourlyDays = 8;
 console.log('....................');
 async function addEnergy(datetime, deviceIdentifier, currentValue, yesterdayValue, totalValue, power, kva, hourlyfactor) {
 	await database.insertSmappeeEnergy(totalValue, yesterdayValue, currentValue, power, kva, deviceIdentifier, datetime, 2, hourlyfactor);
+}
+
+async function addBulkEnergy(arrData) {
+	await database.insertBulkSmappeeEnergy(arrData);
 }
 
 // 5 minute values	10 days -1
@@ -64,7 +68,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 	var lastdate = fromTime;
 	var lastdateTo = toTime;
 	var aggregation_closure = aggregation;
-
+   
 	console.log(deviceId + ': url ' + url)
 
 	const options = {
@@ -76,6 +80,9 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 
 	async function callback(error, response, body) {
 		// console.log(deviceId + ": callback");
+		// console.log(lastdate + ": lastdate");
+		 var startingDate = new Date(lastdate);
+		 var endingDate = new Date(lastdateTo);
 		// console.log(JSON.stringify(response) + ": response");
 		var hourlyfactor = 1;
 		if (aggregation_closure == 1) {
@@ -83,7 +90,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 		} else if (aggregation_closure == 3) {
 			hourlyfactor = 24;
 		} else if (aggregation_closure == 4) {
-			hourlyfactor = 24 * daysInMonth(currentDateTime.getFullYear(), currentDateTime.getMonth());;
+			hourlyfactor = 24 * daysInMonth(startingDate.getFullYear(), startingDate.getMonth());;
 		}
 
 		var hourlyfactor_reverse = 1;
@@ -92,7 +99,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 		} else if (aggregation_closure == 3) {
 			hourlyfactor_reverse = 1/24;
 		} else if (aggregation_closure == 4) {
-			hourlyfactor_reverse = 1/(24 * daysInMonth(currentDateTime.getFullYear(), currentDateTime.getMonth()));
+			hourlyfactor_reverse = 1/(24 * daysInMonth(startingDate.getFullYear(), startingDate.getMonth()));
 		}
 
 		if (!error && response.statusCode == 200) {
@@ -100,27 +107,35 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 			var len = info.consumptions.length;
 			var i = 0;
 
-			var nodeDevices = [];
+			var nodeSubMeterDevices = [];
+			var nodeGridDevices = [];
 			if (isBrain) {
 			//	console.log("getDevicesNodesByDevice", deviceId)
-				nodeDevices = await database.getDevicesNodesByDevice(deviceId);
+				nodeSubMeterDevices = await database.getDevicesNodesByDevice(deviceId,false);
+				nodeGridDevices = await database.getDevicesNodesByDevice(deviceId,true);
+			//	nodeGridDeviceIdentifiers =  [...new Set(nodeGridDevices.map(it => it.identifier))];
 			}
 			//console.log("nodeDevices", nodeDevices.length)
 			if (len == 0) {
-				//console.log("len == 0")
-				if (`aggregation_closure` == 4) {
-					lastdate = lastdateTo.setDate(lastdateTo.getDate() - dailyDays);
-				}
-				await addEnergy(new Date(lastdate), deviceId, 0, 0, 0, 0);
-				for (var nodeDevice of nodeDevices) {
-					await addEnergy(new Date(lastdate), nodeDevice.device_id, 0, 0, 0, 0);
+				var dateTimeForEmpty = new Date(lastdate);
+				if (aggregation_closure == 4) {
+					dateTimeForEmpty = startingDate.setDate(startingDate.getDate() - dailyDays);
+				
+					// if (aggregation_closure == 3 || aggregation_closure == 2) {
+					// 	dateTimeForEmpty = new Date(lastdateTo);
+					// }
+					await addEnergy(dateTimeForEmpty, deviceId, 0, 0, 0, 0);
+					for (var nodeDevice of nodeSubMeterDevices) {
+						await addEnergy(dateTimeForEmpty, nodeDevice.device_id, 0, 0, 0, 0);
+					}
 				}
 				return;
 			}
 			var previousDatetimeStamp = lastdate;
 
+			var insertResults = [];
 			for (var data of info.consumptions) {
-			//	console.log("data")
+				//console.log("data")
 				i++;
 				if (i == len && !forceSave) {
 				//	console.log("break")
@@ -142,17 +157,21 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 				totalValue = (parseFloat(parseFloat(totalValue) + parseFloat(data.consumption / 1000)).toFixed(4));
 				let power = (parseFloat(parseFloat(data.consumption/1000) * hourlyfactor_reverse).toFixed(4));	
 				if (isBrain) {
-				  kva = (parseFloat(parseFloat(getKva(data)/1000) * hourlyfactor_reverse).toFixed(4));	
+				  kva = (parseFloat(parseFloat(getKva(data,nodeGridDevices)/1000) * hourlyfactor_reverse).toFixed(4));	
 				}		
 
 				if (isBrain) {
-					for (var i = 0; i < nodeDevices.length; i++) {
-						await addNodeEnergy(nodeDevices[i], data, currentDateTime, previousDatetimeStamp, hourlyfactor, hourlyfactor_reverse)
+					for (var i = 0; i < nodeSubMeterDevices.length; i++) {
+						insertResults.push(addNodeEnergy(nodeSubMeterDevices[i], data, currentDateTime, previousDatetimeStamp, hourlyfactor, hourlyfactor_reverse));
 					}
 				}
-				await addEnergy(currentDateTime, deviceId, currentValue, yesterdayValue, totalValue, power, kva, hourlyfactor);
+
+				insertResults.push(AddItem(currentDateTime, deviceId, currentValue, yesterdayValue,  totalValue, power, kva, hourlyfactor));
+				//await addEnergy(currentDateTime, deviceId, currentValue, yesterdayValue, totalValue, power, kva, hourlyfactor);
 				previousDatetimeStamp = data.timestamp;
 			}
+			await addBulkEnergy(insertResults);
+			// add bulk
 		} else {
 			console.error('Error: ' + error + JSON.stringify(response));
 		}
@@ -161,25 +180,34 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 	request(options, callback);
 }
 
+function AddItem(time, device_id, today, yesterday, total, power, kva, hourlyfactor){
+	return {time, device_id, today, yesterday, total, power, kva, hourlyfactor};
+}
 //FIrst 3 are for 3 phase power
-function getKva(data){
+function getKva(data,nodeGridDevices){
+	var consumption = 0;
+	var reactive = 0;
+
 	if(data.active.length <= 2 || data.reactive.length <= 2){
 		return 0;
 	}
-	var consumption = data.active[0] + data.active[1] + data.active[2];
-	var reactive = data.reactive[0] + data.reactive[1] + data.reactive[2];
+	nodeGridDevices.forEach(nodeGridDevice => {
+		consumption += data.active[parseInt(nodeGridDevice.identifier)];
+	 	reactive += data.reactive[parseInt(nodeGridDevice.identifier)];
+	});
+	
 	var kvaConsumption = Math.sqrt(Math.pow(consumption ,2) + Math.pow(reactive,2));
 	return kvaConsumption;
 }
 
-async function addNodeEnergy(nodeDevice, data, currentDateTime, previousDatetimeStamp, hourlyfactor, hourlyfactor_reverse) {
+function addNodeEnergy(nodeDevice, data, currentDateTime, previousDatetimeStamp, hourlyfactor, hourlyfactor_reverse) {
 
 	var id = parseInt(nodeDevice.identifier);
-	if (id == 0 && id > nodeDevice.active.length()) {
+	if (id > data.active.length) {
 		return;
 	}
-	var consumption = data.active[id - 1];
-	var reactive = data.reactive[id - 1];
+	var consumption = data.active[id];
+	var reactive = data.reactive[id];
 	var kvaConsumption = Math.sqrt(Math.pow(consumption ,2) + Math.pow(reactive,2));
 	//voltage = data.voltages[id - 1];
 
@@ -193,9 +221,8 @@ async function addNodeEnergy(nodeDevice, data, currentDateTime, previousDatetime
 	let power = (parseFloat(parseFloat(consumption/1000) * hourlyfactor_reverse).toFixed(4));
 	let kva = (parseFloat(parseFloat(kvaConsumption/1000) * hourlyfactor_reverse).toFixed(4));
 
-	await addEnergy(currentDateTime, nodeDevice.device_id,
-		nodeDevice.energy_today, nodeDevice.energy_yesterday, nodeDevice.energy_total, power, kva, hourlyfactor);
-
+	return AddItem(currentDateTime, nodeDevice.device_id,nodeDevice.energy_today, nodeDevice.energy_yesterday,
+		nodeDevice.energy_total, power,  kva,  hourlyfactor);
 }
 
 function nextday(dateFrom, dateTo) {
@@ -237,7 +264,10 @@ function addNewServiceLocation() {
 			for (var data of info.serviceLocations) {
 				var location = await database.getLocationByIdentifier(data.serviceLocationId);
 				if (location == null) {
-					await database.insertSmappeeLocationAndDevice(data.serviceLocationId, data.name, data.deviceSerialNumbernull, null);
+					var device = await database.insertSmappeeLocationAndDevice(data.serviceLocationId, data.name, data.deviceSerialNumber,null, null);
+					if(data.deviceSerialNumber != undefined &&  data.deviceSerialNumber !== null &&  data.deviceSerialNumber.startsWith("20")){
+						addNewNodesLocation(device);
+					}
 				}
 			}
 		} else {
@@ -245,8 +275,32 @@ function addNewServiceLocation() {
 		}
 		return;
 	}
-
 	request(options, callbackInsertSmappeeLocationAndDevice);
+}
+
+function addNewNodesLocation(parentDevice) {
+
+	var url = API_URL + "servicelocation/"+parentDevice.Identifier+'/info';
+	const options = {
+		url: url,
+		headers: {
+			'Authorization': AUTH_TOKEN
+		}
+	};
+
+	async function callbackInsertSmappeeNodes(error, response, body) {
+		if (!error && response.statusCode == 200) {
+			const info = JSON.parse(body);
+			for (var data of info.channelsConfiguration.inputChannels) {
+				await database.insertSmappeeNodeDevice(parentDevice, data.ctInput, data.name, data.inputChannelConnection);
+			}
+		} else {
+			console.error('Error' + error + response);
+		}
+		return;
+	}
+	var parentDevice = parentDevice;
+	request(options, callbackInsertSmappeeNodes);
 }
 
 function futureDateTime(inputTime, day, hour, minute) {
