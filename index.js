@@ -43,7 +43,7 @@ async function getData(device) {
 		}
 	} else {
 		var lastDateTime = device.created;
-		console.log(lastDateTime.getTime())
+		//console.log(lastDateTime.getTime())
 		var measureMonthCurrentDateTime = new Date();
 		measureMonthCurrentDateTime.setDate(measureMonthCurrentDateTime.getDate() - 365);
 		getDataReading(4, device.device_id, device.identifier, lastDateTime.getTime(),
@@ -69,7 +69,7 @@ function getDataReading(aggregation, deviceId, identifier, fromTime, toTime, tot
 	var lastdateTo = toTime;
 	var aggregation_closure = aggregation;
    
-	console.log(deviceId + ': url ' + url)
+	//console.log(deviceId + ': url ' + url)
 
 	const options = {
 		url: url,

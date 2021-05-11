@@ -8,14 +8,20 @@ let DefaultParentLocationId = 574
 const getDevicesInfoByDeviceType = async (deviceTypeId) => {
       var results = [];
       var sql = `SELECT d.device_id, d.tele_period, d.identifier, l.identifier as location_identifier,
-      l.username as location_username,l.password as location_password, d.created, e2.time as energy_time,
-      COALESCE(e2.total,\'0\') as energy_total ,COALESCE(e2.yesterday,\'0\') as energy_yesterday ,COALESCE(e2.today,\'0\') as energy_today,
+      l.username as location_username,l.password as location_password, d.created, 
+      e2.time as energy_time,
+      COALESCE(e2.total,\'0\') as energy_total ,
+      COALESCE(e2.yesterday,\'0\') as energy_yesterday ,
+      COALESCE(e2.today,\'0\') as energy_today,
   dt.is_node, dt.is_brain
   FROM public.device d 
   inner join public.location l on l.location_id = d.location_id 
   inner join public.devicetype dt on dt.devicetype_id = d.devicetype_id 
-  left join (  select e1.device_id,e1.time,e1.total,e1.yesterday,e1.today from energy e1 inner join  
-    (select max(time) as time ,ei.device_id from energy ei group by ei.device_id) e on e.time = e1.time and e.device_id = e1.device_id)  e2 on e2.device_id = d.device_id 
+  LEFT JOIN LATERAL (
+    SELECT * FROM energy l
+      WHERE l.device_id = d.device_id
+      ORDER BY time DESC LIMIT 1
+  ) AS e2 ON true
   WHERE d.devicetype_id = $1 and l.is_active = true 
       ORDER BY d.device_id ASC`;
       try {
@@ -36,15 +42,19 @@ const getDevicesNodesByDevice = async(deviceId,isGrid) => {
   }
 
   var results = [];
-  var sql = `SELECT d.device_id, d.tele_period, d.identifier, l.identifier as location_identifier,
-  l.username as location_username,l.password as location_password, d.created,
-e2.time as energy_time ,COALESCE(e2.total,\'0\') as energy_total ,COALESCE(e2.yesterday,\'0\') as energy_yesterday ,COALESCE(e2.today,\'0\') as energy_today
-FROM public.device d 
-inner join public.location l on l.location_id = d.location_id 
-left join (  select e1.device_id,e1.time,e1.total,e1.yesterday,e1.today from energy e1 inner join  
-(select max(time) as time ,ei.device_id from energy ei group by ei.device_id) e on e.time = e1.time and e.device_id = e1.device_id)  e2 on e2.device_id = d.device_id 
-WHERE d.parent_device_id = $1 and l.is_active = true and devicetype_id = $2
-  ORDER BY d.device_id ASC`;
+  var sql = `SELECT d.device_id, d.tele_period, d.identifier, d.created,
+  e2.time as energy_time,
+  COALESCE(e2.total,\'0\') as energy_total,
+  COALESCE(e2.yesterday,\'0\') as energy_yesterday, 
+  COALESCE(e2.today,\'0\') as energy_today 
+  FROM device d
+  LEFT JOIN LATERAL (
+    SELECT * FROM energy l
+      WHERE l.device_id = d.device_id
+      ORDER BY time DESC LIMIT 1
+  ) AS e2 ON true
+WHERE d.parent_device_id = $1 and devicetype_id = $2
+ORDER BY d.device_id, e2.time DESC;`;
   try {
     const { rows } = await pool.query(sql,[deviceId, devicetype_id]);
     return rows;
@@ -81,7 +91,7 @@ const insertBulkSmappeeEnergy = async (data) => {
 
   let query = format(`INSERT INTO energy (time, device_id, total, yesterday,today, power, kva, hourlyfactor, factor, voltage, current, utcdate)
   values %L`, records);
-  console.log(query)
+ // console.log(query)
   await pool.query(query,(err,res)=> {
     if(err){
         console.error(": Database insertBulkSmappeeEnergy " + err + " ") 
@@ -93,7 +103,7 @@ exports.insertBulkSmappeeEnergy = insertBulkSmappeeEnergy;
 
 const getLocationByIdentifier = async(identifier) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM location WHERE identifier = $1',[identifier]);
+    const { rows } = await pool.query('SELECT location_id FROM location WHERE identifier = $1',[identifier]);
     if(rows.length > 0){
       return rows[0];
     }
@@ -144,18 +154,18 @@ const insertSmappeeNodeDevice = async (parentDevice, identifier, name, channelCo
 exports.insertSmappeeNodeDevice = insertSmappeeNodeDevice;
 
 const insertLocation = async(data)=>{
-  console.log('insertLocaton '); 
+  //console.log('insertLocaton '); 
   let result = await pool.query(`INSERT INTO location (name, timezone_id, customer_id,identifier,parent_location_id,is_active) 
   values ($1,$2,$3,$4,$5,$6) RETURNING location_id`,
   [ data.Name, data.TimezoneId,data.CustomerId,data.Identifier,data.ParentLocationId, data.IsActive]);
   var location_id =  result.rows[0].location_id;
-  console.log('result ' + location_id);
+ // console.log('result ' + location_id);
   return location_id;
 }
 exports.insertLocation = insertLocation;
 
 const insertDevice = async(device)=>{
-  console.log(JSON.stringify(device)); 
+ // console.log(JSON.stringify(device)); 
   let device_id = await pool.query(`INSERT INTO device 
     (identifier, name, description, customer_id, devicetype_id, location_id,tele_period, username, password, parent_device_id )
     values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING device_id`,
